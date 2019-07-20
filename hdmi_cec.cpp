@@ -141,7 +141,7 @@ bool HdmiCec::specialMessageHandling(const CecMessage& msg)
 
 			if (vendor_id == CEC_VENDOR_ID_LG && !mSimplink) {
 				mSimplink = true;
-				ALOGD("%s: SimpLink detected", __func__);
+				ALOGI("%s: LG SimpLink detected", __func__);
 			}
 
 			return false;
@@ -217,8 +217,6 @@ void *HdmiCec::pollThread()
 
 void HdmiCec::hotplugEvent()
 {
-	ALOGD("%s", __func__);
-
 	struct cec_event	event;
 	int					rc;
 
@@ -230,36 +228,20 @@ void HdmiCec::hotplugEvent()
 		return;
 	}
 
-	ALOGD("%s: event: %d", __func__, event.event);
-	
-/*	if (event.event == CEC_EVENT_PIN_HPD_LOW) {
-		ALOGD("%s CEC_EVENT_PIN_HPD_LOW", __func__);
-		hotplugEvent.connected = false ;
-	} else if (event.event == CEC_EVENT_PIN_HPD_HIGH) {
-		ALOGD("%s CEC_EVENT_PIN_HPD_HIGH", __func__);
-		hotplugEvent.connected = true;
-	} else */ 
-	
-	if (event.event == CEC_EVENT_STATE_CHANGE) {
-		ALOGD("%s Adapt state change, phy_addr: %x, log_addr_mask: %02X, flags: %x",
-		 __func__, event.state_change.phys_addr, event.state_change.log_addr_mask, event.flags);
-		hotplugEvent.connected = event.state_change.phys_addr != CEC_PHYS_ADDR_INVALID;
-	} else
+	if (event.event != CEC_EVENT_STATE_CHANGE)
 		return;
+
+	hotplugEvent.connected = event.state_change.phys_addr != CEC_PHYS_ADDR_INVALID;
 
 	if (mLastConnectState == hotplugEvent.connected)
 		return;
 
 	mLastConnectState = hotplugEvent.connected;
 
-	if (mCallback == nullptr) {
-		ALOGD("%s: No callback registered", __func__);
+	if (mCallback == nullptr)
 		return;
-	}
 
 	if (!hotplugEvent.connected) {
-		ALOGD("%s Sending standy message to myself", __func__);
-
 		CecMessage cecMessage {
 			.initiator   = CecLogicalAddress::TV,
 			.destination = mLogAddr,
@@ -269,32 +251,11 @@ void HdmiCec::hotplugEvent()
 		mCallback->onCecMessage(cecMessage);	
 	}
 
-	ALOGD("%s calling callback, connected: %d", __func__, hotplugEvent.connected);
 	mCallback->onHotplugEvent(hotplugEvent);
-}
-
-void HdmiCec::reportPowerStatus(CecLogicalAddress initiator, CecLogicalAddress destination, bool on)
-{
-	ALOGD("%s", __func__);
-
-	if (mCallback == nullptr) {
-		ALOGD("%s: No callback registered", __func__);
-		return;
-	}
-
-	CecMessage cecMessage {
-		.initiator   = initiator,
-		.destination = destination,
-		.body		 = { CEC_MSG_REPORT_POWER_STATUS, on ? (uint8_t)CEC_OP_POWER_STATUS_ON : (uint8_t)CEC_OP_POWER_STATUS_STANDBY }
-	};
-
-	mCallback->onCecMessage(cecMessage);	
 }
 
 void HdmiCec::receiveMessage()
 {
-	ALOGD("%s", __func__);
-
 	struct cec_msg		msg;
 	int					rc;
 
@@ -334,7 +295,7 @@ void HdmiCec::receiveMessage()
 Return<SendMessageResult> HdmiCec::sendMessage(const CecMessage& msg)
 {
 	if (!mEnabled) {
-		ALOGE("%s: cec is disabled", __func__);
+		ALOGI("%s: cec is disabled", __func__);
         return SendMessageResult::FAIL;
 	}
 
@@ -356,33 +317,19 @@ Return<SendMessageResult> HdmiCec::sendMessage(const CecMessage& msg)
 	rc = ioctl(mFd, CEC_TRANSMIT, &cec);
 	if (rc < 0) {
 		if (msg.initiator == msg.destination && msg.body.size() == 0)
+			/* Discovery poll message: Indicate usable LA with NACK */
 			return SendMessageResult::NACK;
 		
 		ALOGE("ioctl err: %d %s", rc, strerror(errno));
 		return SendMessageResult::FAIL;
 	}
 
-	if (cec.tx_status & CEC_TX_STATUS_OK) {
-		ALOGI("%s HDMI_RESULT_SUCCESS", __func__);
+	if (cec.tx_status & CEC_TX_STATUS_OK)
 		return SendMessageResult::SUCCESS;
-	}
 
-	/* Send dummy message if the device is not CEC capable */
-/*
-	if (msg.body[0] == CEC_MSG_GIVE_DEVICE_POWER_STATUS) {
-		ALOGI("%s: Sending dummy response", __func__);
-		mCecCapablePartner = false;
-		reportPowerStatus(msg.destination, msg.initiator, getPhysicalAddress() != CEC_PHYS_ADDR_INVALID);
-		return SendMessageResult::SUCCESS;
-	}
-*/
-	if (cec.tx_status & CEC_TX_STATUS_NACK) {
-		ALOGI("HDMI_RESULT_NACK");
+	if (cec.tx_status & CEC_TX_STATUS_NACK)
 		return SendMessageResult::NACK;
-	}
 
-
-	ALOGI("HDMI_RESULT_BUSY");
 	return SendMessageResult::BUSY;
 }
 
@@ -432,14 +379,6 @@ Return<Result> HdmiCec::addLogicalAddress(CecLogicalAddress addr)
 	log_addrs.cec_version = CEC_VERSION;
 	strcpy(log_addrs.osd_name, "RK");
 
-ALOGD("Going to set %d logical addresses", log_addrs.num_log_addrs);
-for (int i=0; i < log_addrs.num_log_addrs; i++) {
-	ALOGD("LA[%d] primary_device_type:%02x, log_addr_type:%02x, log_addr:%02x", i,
-			log_addrs.primary_device_type[i],
-			log_addrs.log_addr_type[i],
-			log_addrs.log_addr[i]);
-}
-
 	rc = ioctl(mFd, CEC_ADAP_S_LOG_ADDRS, &log_addrs);
 	if (rc) {
 		ALOGE("%s: CEC_ADAP_S_LOG_ADDRS failed: %d (%s)", __func__, rc, strerror(errno));
@@ -469,8 +408,6 @@ Return<void> HdmiCec::clearLogicalAddress()
 
 uint16_t HdmiCec::getPhysicalAddress()
 {
-	ALOGD("get physical address");
-
 	uint16_t	addr = 0;
 	int			rc, i;
 
@@ -492,8 +429,6 @@ uint16_t HdmiCec::getPhysicalAddress()
 
 Return<void> HdmiCec::getPhysicalAddress(getPhysicalAddress_cb _hidl_cb)
 {
-	ALOGD("%s", __func__);
-
 	uint16_t	addr = getPhysicalAddress();
 	
 	if (addr == CEC_PHYS_ADDR_INVALID)
@@ -556,16 +491,13 @@ Return<void> HdmiCec::setOption(OptionKey key, bool value)
 {
 	switch (key) {
 		case OptionKey::WAKEUP:
-		ALOGD("Wakeup: value: %d", value);
 		break;
 
 	case OptionKey::ENABLE_CEC:
-		ALOGD("Enable CEC: value: %d", value);
 		mEnabled = value ? 1 : 0;
 		break;
 
 	case OptionKey::SYSTEM_CEC_CONTROL:
-		ALOGD("system_control: value: %d", value);
 		mSystemControl = value ? 1 : 0;
 		break;
 	}	
@@ -597,7 +529,6 @@ Return<void> HdmiCec::setLanguage(const hidl_string& language)
 }
 
 Return<void> HdmiCec::enableAudioReturnChannel(int32_t portId, bool enable) {
-	ALOGD("ARC called %d", enable);
 	return Void();
 }
 
@@ -612,8 +543,6 @@ void HdmiCec::startPollThread()
 	if (mPollThreadActive)
 		return;
 		
-	ALOGD("Starting poll thread");
-
 	int rc = pthread_create(&mPollThreadId, 0, pollThreadWrapper, this);
 	if (rc)
 		ALOGE("Failed to create poll thread %s", strerror(errno));
@@ -624,8 +553,6 @@ void HdmiCec::stopPollThread()
 	if (!mPollThreadActive)
 		return;
 	
-	ALOGD("%s", __func__);
-
 	int			written;
 	uint64_t	counter = 1;
 
@@ -633,9 +560,7 @@ void HdmiCec::stopPollThread()
 	if (written != sizeof(counter))
 		ALOGE("%s: Failed to write to event fd %s", __func__, strerror(errno));
 
-	ALOGD("%s waiting for thread to exit", __func__);
 	pthread_join(mPollThreadId, NULL);	
-	ALOGD("%s stopped", __func__);
 }
 
 HdmiCec::HdmiCec() :
@@ -648,7 +573,7 @@ HdmiCec::HdmiCec() :
 		mPollThreadActive(false),
 		mCallback(nullptr)
 {
-	ALOGI("Using device dev/cec0");
+	ALOGD("Using device dev/cec0");
 	mFd = open("dev/cec0", O_RDWR);
 
 	if (mFd < 0) {
@@ -662,7 +587,6 @@ HdmiCec::HdmiCec() :
 	if (rc)
 		ALOGE("%s: CEC_S_MODE failed: %d (%s)", __func__, rc, strerror(errno));
 
-	ALOGD("fd = %d", mFd);
 	property_set("vendor.sys.hdmicec.version", "1.0");
 }
 

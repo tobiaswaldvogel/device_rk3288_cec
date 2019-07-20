@@ -47,6 +47,9 @@ static inline void cec_msg_init(struct cec_msg *msg,
 	msg->len = 1;
 }
 
+using ::android::sp;
+using namespace android::hardware;
+using namespace android::hardware::tv::cec::V1_0;
 
 namespace android {
 namespace hardware {
@@ -54,25 +57,6 @@ namespace tv {
 namespace cec {
 namespace V1_0 {
 namespace implementation {
-
-using ::android::hardware::tv::cec::V1_0::CecLogicalAddress;
-using ::android::hardware::tv::cec::V1_0::CecMessage;
-using ::android::hardware::tv::cec::V1_0::MaxLength;
-using ::android::hardware::tv::cec::V1_0::HdmiPortInfo;
-using ::android::hardware::tv::cec::V1_0::IHdmiCec;
-using ::android::hardware::tv::cec::V1_0::IHdmiCecCallback;
-using ::android::hardware::tv::cec::V1_0::OptionKey;
-using ::android::hardware::tv::cec::V1_0::Result;
-using ::android::hardware::tv::cec::V1_0::SendMessageResult;
-using ::android::hidl::base::V1_0::DebugInfo;
-using ::android::hidl::base::V1_0::IBase;
-using ::android::hardware::hidl_array;
-using ::android::hardware::hidl_memory;
-using ::android::hardware::hidl_string;
-using ::android::hardware::hidl_vec;
-using ::android::hardware::Return;
-using ::android::hardware::Void;
-using ::android::sp;
 
 struct HdmiCec : public IHdmiCec, public hidl_death_recipient {
     HdmiCec();
@@ -116,7 +100,6 @@ private:
 	void stopPollThread();
 		
 	uint16_t getPhysicalAddress();
-	void reportPowerStatus(CecLogicalAddress initiator, CecLogicalAddress destination, bool on);
 	bool specialMessageHandling(const CecMessage& msg);
 	bool processSimplink(const CecMessage& msg);
 
